@@ -99,6 +99,51 @@ async function deleteTodo(id) {
     }
 }
 
+// Edit a todo
+async function editTodo(id) {
+    const todo = todos.find(t => t.id === Number(id));
+    if (!todo) {
+        alert('Todo not found');
+        return;
+    }
+    
+    const newText = prompt('Edit your todo:', todo.text);
+    
+    if (newText === null) {
+        // User cancelled
+        return;
+    }
+    
+    if (!newText.trim()) {
+        alert('Todo text cannot be empty');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/${id}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text: newText.trim() }),
+        });
+        
+        if (response.ok) {
+            const updatedTodo = await response.json();
+            const index = todos.findIndex(t => t.id === Number(id));
+            if (index !== -1) {
+                todos[index] = updatedTodo;
+                renderTodos();
+            }
+        } else {
+            alert('Failed to edit todo');
+        }
+    } catch (error) {
+        console.error('Error editing todo:', error);
+        alert('Failed to edit todo');
+    }
+}
+
 // Render todos to the DOM
 function renderTodos() {
     if (todos.length === 0) {
@@ -113,6 +158,7 @@ function renderTodos() {
                     onchange="toggleTodo(${todo.id})"
                 />
                 <span class="todo-text">${escapeHtml(todo.text)}</span>
+                <button class="edit-btn" onclick="editTodo(${todo.id})">Edit</button>
                 <button class="delete-btn" onclick="deleteTodo(${todo.id})">Delete</button>
             </div>
         `).join('');

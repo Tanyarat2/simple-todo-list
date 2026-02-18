@@ -156,6 +156,138 @@ describe('Todo API Endpoints', () => {
     });
   });
 
+  describe('PATCH /api/todos/:id', () => {
+    test('should edit todo text', async () => {
+      // Create a todo
+      const createResponse = await request(app)
+        .post('/api/todos')
+        .send({ text: 'Original text' });
+      
+      const todoId = createResponse.body.id;
+      
+      // Edit the todo
+      const response = await request(app)
+        .patch(`/api/todos/${todoId}`)
+        .send({ text: 'Updated text' });
+      
+      expect(response.status).toBe(200);
+      expect(response.body.text).toBe('Updated text');
+      expect(response.body.id).toBe(todoId);
+    });
+
+    test('should trim whitespace from edited text', async () => {
+      const createResponse = await request(app)
+        .post('/api/todos')
+        .send({ text: 'Original' });
+      
+      const todoId = createResponse.body.id;
+      
+      const response = await request(app)
+        .patch(`/api/todos/${todoId}`)
+        .send({ text: '  Updated with spaces  ' });
+      
+      expect(response.status).toBe(200);
+      expect(response.body.text).toBe('Updated with spaces');
+    });
+
+    test('should return 400 if text is missing', async () => {
+      const createResponse = await request(app)
+        .post('/api/todos')
+        .send({ text: 'Test todo' });
+      
+      const todoId = createResponse.body.id;
+      
+      const response = await request(app)
+        .patch(`/api/todos/${todoId}`)
+        .send({});
+      
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error', 'Todo text is required');
+    });
+
+    test('should return 400 if text is empty', async () => {
+      const createResponse = await request(app)
+        .post('/api/todos')
+        .send({ text: 'Test todo' });
+      
+      const todoId = createResponse.body.id;
+      
+      const response = await request(app)
+        .patch(`/api/todos/${todoId}`)
+        .send({ text: '' });
+      
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error', 'Todo text is required');
+    });
+
+    test('should return 400 if text is only whitespace', async () => {
+      const createResponse = await request(app)
+        .post('/api/todos')
+        .send({ text: 'Test todo' });
+      
+      const todoId = createResponse.body.id;
+      
+      const response = await request(app)
+        .patch(`/api/todos/${todoId}`)
+        .send({ text: '   ' });
+      
+      expect(response.status).toBe(400);
+      expect(response.body).toHaveProperty('error', 'Todo text is required');
+    });
+
+    test('should return 404 if todo not found', async () => {
+      const response = await request(app)
+        .patch('/api/todos/999999')
+        .send({ text: 'Updated text' });
+      
+      expect(response.status).toBe(404);
+      expect(response.body).toHaveProperty('error', 'Todo not found');
+    });
+
+    test('should preserve other todo properties when editing', async () => {
+      const createResponse = await request(app)
+        .post('/api/todos')
+        .send({ text: 'Original' });
+      
+      const todoId = createResponse.body.id;
+      const createdAt = createResponse.body.createdAt;
+      
+      // Edit the todo
+      const response = await request(app)
+        .patch(`/api/todos/${todoId}`)
+        .send({ text: 'Updated' });
+      
+      expect(response.status).toBe(200);
+      expect(response.body.completed).toBe(false);
+      expect(response.body.createdAt).toBe(createdAt);
+      expect(response.body).toHaveProperty('updatedAt');
+    });
+
+    test('should allow multiple edits to the same todo', async () => {
+      const createResponse = await request(app)
+        .post('/api/todos')
+        .send({ text: 'Version 1' });
+      
+      const todoId = createResponse.body.id;
+      
+      // First edit
+      const firstEdit = await request(app)
+        .patch(`/api/todos/${todoId}`)
+        .send({ text: 'Version 2' });
+      
+      expect(firstEdit.status).toBe(200);
+      expect(firstEdit.body.text).toBe('Version 2');
+      
+      // Second edit
+      const secondEdit = await request(app)
+        .patch(`/api/todos/${todoId}`)
+        .send({ text: 'Version 3' });
+      
+      expect(secondEdit.status).toBe(200);
+      expect(secondEdit.body.text).toBe('Version 3');
+    });
+  });
+
   describe('DELETE /api/todos/:id', () => {
     test('should delete a todo', async () => {
       // Create a todo
@@ -246,6 +378,42 @@ describe('Todo API Endpoints', () => {
       expect(response.body[0].text).toBe('Todo 1');
       expect(response.body[1].text).toBe('Todo 2');
       expect(response.body[2].text).toBe('Todo 3');
+    });
+
+    test('should handle complete workflow including edit', async () => {
+      // Create a todo
+      const createResponse = await request(app)
+        .post('/api/todos')
+        .send({ text: 'Original todo' });
+      
+      const todoId = createResponse.body.id;
+      expect(createResponse.status).toBe(201);
+      
+      // Edit the todo
+      const editResponse = await request(app)
+        .patch(`/api/todos/${todoId}`)
+        .send({ text: 'Edited todo' });
+      
+      expect(editResponse.status).toBe(200);
+      expect(editResponse.body.text).toBe('Edited todo');
+      
+      // Verify the edit persisted
+      const getResponse = await request(app).get('/api/todos');
+      expect(getResponse.body[0].text).toBe('Edited todo');
+      
+      // Toggle completion
+      const toggleResponse = await request(app).put(`/api/todos/${todoId}`);
+      expect(toggleResponse.status).toBe(200);
+      expect(toggleResponse.body.completed).toBe(true);
+      expect(toggleResponse.body.text).toBe('Edited todo');
+      
+      // Delete the todo
+      const deleteResponse = await request(app).delete(`/api/todos/${todoId}`);
+      expect(deleteResponse.status).toBe(200);
+      
+      // Verify deletion
+      const finalResponse = await request(app).get('/api/todos');
+      expect(finalResponse.body).toHaveLength(0);
     });
   });
 });
